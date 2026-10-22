@@ -1,0 +1,9 @@
+{
+  "profile": "cata",
+  "build": 15595,
+  "package": "cata_context",
+  "core_package": "_cata_context_core",
+  "distribution": "cata-context-api",
+  "version": "0.4.0a1",
+  "native_module": "mod-context-api"
+}

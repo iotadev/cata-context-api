@@ -1,0 +1,12 @@
+* text=auto
+*.patch text eol=lf
+# Unified-diff context lines deliberately contain a single space.
+*.patch whitespace=-blank-at-eol
+*.py text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+MANIFEST.in text eol=lf

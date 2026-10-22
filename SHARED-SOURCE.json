@@ -1,0 +1,15 @@
+{
+  "description": "Identical UTF-8/LF common implementation exported at release time; no cross-expansion runtime dependency.",
+  "version": "0.4.0a1",
+  "sha256": {
+    "__init__.py": "b88d45645bd2b4a64a173b0aba4a5afbaee607c5310d2f1da1217b90737bf953",
+    "cli.py": "8103fa38ea5fc083e771124d608728b5176dc50130a31797c70e5810a09d3290",
+    "consumer.py": "9d1d1066c9d42649b4b53cefebd31f626edf90f27dc0a3741d6d8c649befe9c9",
+    "consumer_receipts.py": "0c81ac15750958931fab9587d88450347ad66cd5eeb04762e792d62717e4cb9f",
+    "module_observations.py": "22bdb756fde4531b5b149704a396d382277bf64c6636f4935c344fd4821dbe27",
+    "movement_capture.py": "3ac909e664c639c20ffec7e2ba43bf3a81d8c944c5a73996f3072bacef5b490a",
+    "party_capture.py": "92131a927ac82f6ddf44c1b09442f8c663fcd29dc5fd71d120412afa65437331",
+    "queries.py": "f9f2bde057cff37f68c320359d89c95c0e50de7bce590b0e905d2cf285960408",
+    "reader.py": "710d7691d5eae995f74580381d4dafb07a0925d711e425840b2ed8f3c110d668"
+  }
+}

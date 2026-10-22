@@ -1,0 +1,43 @@
+diff --git a/src/Bot/PlayerbotSessionBehavior.cpp b/src/Bot/PlayerbotSessionBehavior.cpp
+index 1905557..59964fe 100644
+--- a/src/Bot/PlayerbotSessionBehavior.cpp
++++ b/src/Bot/PlayerbotSessionBehavior.cpp
+@@ -59,6 +59,26 @@ bool PlayerbotModuleSupportsClass(uint8 playerClass)
+ {
+     return playerClass == CLASS_WARRIOR || playerClass == CLASS_MAGE || playerClass == CLASS_PRIEST;
+ }
++PlayerbotContextState PlayerbotSessionBehavior::GetContextStateForMap() const
++{
++    PlayerbotContextState result;
++    if (!_stateEngines || !_engine || _engineTransferSuspended)
++        return result;
++    result.Available = true;
++    result.Staying = _ai.IsStaying();
++    switch (_stateEngines->Current())
++    {
++        case StateEngines::State::NonCombat: result.EngineState = "noncombat"; break;
++        case StateEngines::State::Combat: result.EngineState = "combat"; break;
++        case StateEngines::State::Dead: result.EngineState = "dead"; break;
++    }
++    result.LastExecutedAction = _engine->GetLastAction();
++    result.QueuedCount = _engine->QueuedCount();
++    result.CombatStrategies = _stateEngines->Get(StateEngines::State::Combat).GetStrategies();
++    result.NonCombatStrategies = _stateEngines->Get(StateEngines::State::NonCombat).GetStrategies();
++    return result;
++}
++
+ void PlayerbotSessionBehavior::UpdateMap(uint32 diff)
+ {
+     std::string strategyAck;
+diff --git a/src/Bot/PlayerbotSessionBehavior.h b/src/Bot/PlayerbotSessionBehavior.h
+index de1ce61..5a66e77 100644
+--- a/src/Bot/PlayerbotSessionBehavior.h
++++ b/src/Bot/PlayerbotSessionBehavior.h
+@@ -41,6 +41,7 @@ public:
+     std::shared_ptr<PlayerbotStrategySnapshot const> GetStrategySnapshot() const override
+     { return std::atomic_load(&_strategySnapshot); }
+     void UpdateMap(uint32 diff) override;
++    PlayerbotContextState GetContextStateForMap() const override;
+     void UpdateWorld() override;
+ private:
+     void UpdateServerOriginMovement(uint32 diff);

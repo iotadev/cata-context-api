@@ -1,0 +1,10 @@
+--- a/modules/mod-playerbots/src/Ai/Base/PlayerbotPosition.cpp
++++ b/modules/mod-playerbots/src/Ai/Base/PlayerbotPosition.cpp
+@@ -5,6 +5,7 @@
+ #include "../../Bot/PlayerbotAI.h"
+ #include "MotionMaster.h"
+ #include "Player.h"
++#include "Creature.h"
+ #include "PointMovementGenerator.h"
+ #include "../../Script/PlayerbotConfig.h"
+ namespace

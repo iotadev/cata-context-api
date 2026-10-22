@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "cata-context": {
+      "command": "/absolute/path/to/python",
+      "args": [
+        "-m",
+        "cata_context.mcp_server",
+        "--snapshot",
+        "/absolute/path/to/context-api/snapshot.json"
+      ]
+    }
+  }
+}

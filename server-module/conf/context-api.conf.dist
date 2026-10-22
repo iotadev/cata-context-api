@@ -1,0 +1,19 @@
+# Optional read-only snapshots. Does not enable any Playerbot gameplay controls.
+ContextAPI.Enabled = 0
+# Player character GUID counters, comma separated; 1-8 unique positive IDs.
+# Include the human controller if its party state is needed.
+ContextAPI.Characters = ""
+ContextAPI.SnapshotFile = "context-api/snapshot.json"
+# 250-10000 ms; default is one sample/export per second.
+ContextAPI.IntervalMs = 1000
+# Optional native phase, selected-unit/victim geometry, and scoped peer phase checks.
+# Read-only; does not imply visibility, attack eligibility, or an action rejection reason.
+ContextAPI.DiagnosticDetails = 0
+ContextAPI.ActionHistory = 0
+# History collection additionally needs Playerbots.Diagnostics.Actions.Enabled = 1
+# in playerbots.conf. Both gates default off.
+# Startup configuration only: changing these settings requires a realm restart.
+
+# Optional copied server movement state; speeds are unit speeds, not actual velocity.
+# Uses the normal sample interval. Does not capture collision normals or packet-complete motion.
+ContextAPI.Movement = 0

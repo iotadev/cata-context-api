@@ -1,0 +1,151 @@
+diff --git a/contrib/local/playerbot-lifecycle-smoke.ps1 b/contrib/local/playerbot-lifecycle-smoke.ps1
+index ad3da0f50f..325a3fbc6b 100644
+--- a/contrib/local/playerbot-lifecycle-smoke.ps1
++++ b/contrib/local/playerbot-lifecycle-smoke.ps1
+@@ -1,6 +1,10 @@
+ param([Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Seed,
+     [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$MySqlHome,
+     [string]$BuildDirectory = 'build/bin/RelWithDebInfo', [string]$DataDirectory, [string]$ClassDumpDirectory, [string]$SeedRepository, [switch]$SkipBot, [switch]$ModuleConfig,
++    [switch]$CheckContextAPI,
++    [ValidateRange(1024,65535)][int]$TestDatabasePort = 13306,
++    [ValidateRange(1024,65535)][int]$TestContextWorldPort = 18085,
++    [ValidateRange(1024,65535)][int]$TestContextInstancePort = 18096,
+     [switch]$CheckFactory, [switch]$CheckManagedClient, [switch]$ReuseManagedClientFixture,
+     [ValidatePattern('^[A-Za-z0-9]{3,16}$')][string]$ManagedClientPassword,
+     [switch]$Interactive, [switch]$RecoveryLoot, [switch]$RoleFixture, [switch]$StrategyFixture, [switch]$DungeonFixture,
+@@ -20,6 +24,12 @@ param([Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Seed,
+ # PB-00/PB-01/PB-02 proofs against a COPY of a disposable, cleanly stopped database.
+ # Never use an existing server installation or a live database as the seed.
+ $ErrorActionPreference = 'Stop'
++if ($CheckContextAPI -and (-not $ModuleConfig -or $CheckFullParty -or $CheckTwoBots -or $CheckCombat -or $SkipBot -or $Interactive -or $CheckFollow -or $CheckFactory -or $CheckManagedClient -or $PrepareClassFixture -or $CheckPendingLoad -or $CheckDrainTimeout -or $CheckAdmissionMatrix -or $CheckAdmissionRejects -or $CheckPersistence -or $CheckClientCollision -or $CheckDuplicateStart -or $CheckRosterOnly)) {
++    throw '-CheckContextAPI requires the standalone module-config lifecycle fixture.'
++}
++if (($TestDatabasePort -ne 13306 -or $TestContextWorldPort -ne 18085 -or $TestContextInstancePort -ne 18096) -and -not $CheckContextAPI) {
++    throw 'Alternate ports are supported only by the standalone Context API fixture.'
++}
+ if (($ReuseManagedClientFixture -or $ManagedClientPassword) -and -not $CheckManagedClient) { throw 'Managed client options require -CheckManagedClient.' }
+ if ($CheckManagedClient) {
+     if ($CheckFactory -or $SkipBot -or $CheckFullParty -or $CheckCombat -or $CheckTwoBots -or $PrepareClassFixture -or $Interactive -or $CheckClientCollision -or $CheckFollow -or $CheckAdmissionMatrix -or $CheckAdmissionRejects -or $CheckPendingLoad -or $CheckDrainTimeout -or $CheckPersistence -or $CheckDuplicateStart -or $CheckRosterOnly) {
+@@ -45,7 +55,7 @@ $built = Resolve-TestDirectory $BuildDirectory $repo 'BuildDirectory'
+ Assert-TestFiles $mysqlHome @('bin/mysql.exe','bin/mysqld.exe','bin/libcrypto-3-x64.dll','bin/libssl-3-x64.dll') 'MySqlHome'
+ Assert-TestFiles $built @('worldserver.exe') 'BuildDirectory'
+ if ($DataDirectory) { $gameData = Resolve-TestDirectory $DataDirectory $repo 'DataDirectory' }
+-$allowPlayerbotSeed = $CheckCombat -or $SkipBot -or $CheckTwoBots -or $CheckFullParty -or $PrepareClassFixture -or $CheckFactory -or $CheckManagedClient
++$allowPlayerbotSeed = $CheckCombat -or $SkipBot -or $CheckTwoBots -or $CheckFullParty -or $PrepareClassFixture -or $CheckFactory -or $CheckManagedClient -or $CheckContextAPI
+ $seedRoot = $repo
+ if ($SeedRepository) {
+     $seedRoot = Resolve-TestDirectory $SeedRepository $repo 'SeedRepository'
+@@ -147,7 +157,7 @@ function Invoke-TestSql([string]$sql) {
+     $psi.RedirectStandardInput = $true
+     $psi.RedirectStandardOutput = $true
+     $psi.RedirectStandardError = $true
+-    foreach ($argument in @('--no-defaults','--protocol=TCP','--host=127.0.0.1','--port=13306','--user=cata_smoke','--batch','--skip-column-names','--connect-timeout=3')) { $psi.ArgumentList.Add($argument) }
++    foreach ($argument in @('--no-defaults','--protocol=TCP','--host=127.0.0.1',"--port=$TestDatabasePort",'--user=cata_smoke','--batch','--skip-column-names','--connect-timeout=3')) { $psi.ArgumentList.Add($argument) }
+     [void]$psi.Environment.Remove('PATH')
+     $psi.Environment['MYSQL_PWD'] = $credential.password
+     $process = [Diagnostics.Process]::Start($psi)
+@@ -177,6 +187,9 @@ function Write-TestWorldConfig([string]$text) {
+         $text = [regex]::Replace($text, '(?m)^Modules\.ConfigDirectory\s*=.*\r?\n?', '')
+         $text += "`r`nModules.ConfigDirectory = modules`r`n"
+         [IO.File]::WriteAllText((Join-Path $moduleDirectory 'playerbots.conf'), "[playerbots]`r`n" + ($botLines -join "`r`n") + "`r`n", [Text.UTF8Encoding]::new($false))
++        # This optional module may be compiled even when the capture test is off.
++        $contextConfig = "[context-api]`r`nContextAPI.Enabled = " + [int]$CheckContextAPI.IsPresent + "`r`nContextAPI.Characters = `"$characterGuid`"`r`nContextAPI.SnapshotFile = `"context-api/snapshot.json`"`r`nContextAPI.IntervalMs = 1000`r`n"
++        [IO.File]::WriteAllText((Join-Path $moduleDirectory 'context-api.conf'), $contextConfig, [Text.UTF8Encoding]::new($false))
+     }
+     [IO.File]::WriteAllText((Join-Path $stage 'worldserver.conf'), $text, [Text.UTF8Encoding]::new($false))
+ }
+@@ -198,7 +211,7 @@ function Wait-ForHuman([scriptblock]$condition, [int]$seconds, [string]$descript
+     Wait-For $condition $(if ($Interactive) { 0 } else { $seconds }) $description
+ }
+ 
+-foreach ($port in ($(if ($CheckFollow -or $CheckCombat -or $CheckFullParty -or $PrepareClassFixture) { @(13306, 8085, 8086, 3724) } else { @(13306, 18085) + $(if ($CheckClientCollision) { 13724 }) }))) {
++foreach ($port in ($(if ($CheckFollow -or $CheckCombat -or $CheckFullParty -or $PrepareClassFixture) { @(13306, 8085, 8086, 3724) } else { @($TestDatabasePort, $TestContextWorldPort) + $(if ($CheckContextAPI) { @($TestContextInstancePort) }) + $(if ($CheckClientCollision) { 13724 }) }))) {
+     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $port)
+     try { $listener.Start() } finally { $listener.Stop() }
+ }
+@@ -223,12 +236,24 @@ try {
+     # worldserver build itself imports OpenSSL 4. Stage both ABI versions.
+     foreach ($name in @('libcrypto-3-x64.dll','libssl-3-x64.dll')) { Copy-Item -LiteralPath (Join-Path $mysqlHome "bin/$name") -Destination $stage }
+     Copy-Item -LiteralPath (Join-Path $built 'worldserver.exe') -Destination $stage
+-    if (Test-Path -LiteralPath (Join-Path $built 'worldserver.pdb')) { Copy-Item -LiteralPath (Join-Path $built 'worldserver.pdb') -Destination $stage }
++    if (-not $CheckContextAPI -and (Test-Path -LiteralPath (Join-Path $built 'worldserver.pdb'))) { Copy-Item -LiteralPath (Join-Path $built 'worldserver.pdb') -Destination $stage }
+     if ($CheckClientCollision -or $CheckFollow -or $CheckCombat -or $CheckFullParty -or $PrepareClassFixture) {
+         Copy-Item -LiteralPath (Join-Path $built 'authserver.exe') -Destination $stage
+         if (Test-Path -LiteralPath (Join-Path $built 'authserver.pdb')) { Copy-Item -LiteralPath (Join-Path $built 'authserver.pdb') -Destination $stage }
+     }
+     $config = [IO.File]::ReadAllText((Join-Path $seedPath 'worldserver.conf'))
++    if ($CheckContextAPI) {
++        # Rewrite only the copied test DB connection ports, preserving secrets.
++        if ([regex]::Matches($config, '(?m)^((?:Login|World|Character|Hotfix)DatabaseInfo\s*=\s*"127\.0\.0\.1;)13306(;)' ).Count -ne 4) {
++            throw 'Context fixture must identify and redirect all four copied database connections before starting.'
++        }
++        $config = [regex]::Replace($config, '(?m)^((?:Login|World|Character|Hotfix)DatabaseInfo\s*=\s*"127\.0\.0\.1;)13306(;)', [Text.RegularExpressions.MatchEvaluator]{ param($match) $match.Groups[1].Value + $TestDatabasePort + $match.Groups[2].Value })
++        $config = [regex]::Replace($config, '(?m)^WorldServerPort\s*=.*$', "WorldServerPort = $TestContextWorldPort")
++        if ([regex]::Matches($config, '(?m)^InstanceServerPort\s*=').Count -ne 1) {
++            throw 'Context fixture must identify its independent instance listener port.'
++        }
++        $config = [regex]::Replace($config, '(?m)^InstanceServerPort\s*=.*$', "InstanceServerPort = $TestContextInstancePort")
++    }
+     if ($DataDirectory) {
+         $config = [regex]::Replace($config, '(?m)^DataDir\s*=.*$', [Text.RegularExpressions.MatchEvaluator]{ param($match) 'DataDir = "' + $gameData.Replace('\','/') + '"' })
+     }
+@@ -255,7 +280,7 @@ try {
+         [IO.File]::WriteAllText((Join-Path $stage 'authserver.conf'), $authConfig, [Text.UTF8Encoding]::new($false))
+     }
+ 
+-    $mysqlWorker = Start-Worker $mysqlServerExe @('--no-defaults',"--basedir=$mysqlHome",("--datadir="+(Join-Path $stage 'mysql-data')),'--bind-address=127.0.0.1','--port=13306','--mysqlx=OFF','--skip-name-resolve','--skip-log-bin','--lower-case-table-names=1','--innodb-buffer-pool-size=512M','--innodb-redo-log-capacity=1G','--innodb-flush-log-at-trx-commit=2','--max-allowed-packet=256M',("--log-error="+(Join-Path $stage 'mysql-error.log'))) 'mysql'
++    $mysqlWorker = Start-Worker $mysqlServerExe @('--no-defaults',"--basedir=$mysqlHome",("--datadir="+(Join-Path $stage 'mysql-data')),'--bind-address=127.0.0.1',"--port=$TestDatabasePort",'--mysqlx=OFF','--skip-name-resolve','--skip-log-bin','--lower-case-table-names=1','--innodb-buffer-pool-size=512M','--innodb-redo-log-capacity=1G','--innodb-flush-log-at-trx-commit=2','--max-allowed-packet=256M',("--log-error="+(Join-Path $stage 'mysql-error.log'))) 'mysql'
+     $deadline = (Get-Date).AddSeconds(90)
+     do {
+         if ($mysqlWorker.Process.HasExited) { throw 'Cloned MySQL exited before ready.' }
+@@ -1114,6 +1139,50 @@ try {
+     Send-WorldCommand 'server playerbotdev start'
+     Wait-For { (Invoke-TestSql "SELECT online FROM characters.characters WHERE guid=$characterGuid;") -eq '1' } 90 'Warrior online state'
+     Send-WorldCommand 'server playerbotdev status'
++    if ($CheckContextAPI) {
++        $contextCapture = Join-Path $stage 'context-api/snapshot.json'
++        function Read-ContextCapture {
++            try { [IO.File]::ReadAllText($contextCapture) | ConvertFrom-Json -ErrorAction Stop } catch { return $null }
++        }
++        Wait-For {
++            $capture = Read-ContextCapture
++            $capture -and $capture.source -eq 'server' -and $capture.server.status -eq 'running' -and
++                $capture.entities.Count -eq 1 -and $capture.entities[0].state -eq 'online' -and
++                $capture.entities[0].player.name -eq 'Testone' -and $capture.entities[0].player.origin -eq 'server'
++        } 30 'native Context API online snapshot'
++        $contextOnline = Read-ContextCapture
++        $contextGeneration = $contextOnline.entities[0].session_generation
++        # An online idle bot must continue to be sampled. Grid visitation alone
++        # is not a reliable clock for server-origin players in a quiet instance.
++        for ($contextIdleCheck = 0; $contextIdleCheck -lt 8; ++$contextIdleCheck) {
++            Start-Sleep -Seconds 1
++            $contextIdle = Read-ContextCapture
++            $contextWallNow = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
++            if (-not $contextIdle -or $contextIdle.entities[0].state -ne 'online' -or
++                $contextWallNow - $contextIdle.entities[0].sampled_at_ms -gt 5000) {
++                throw 'Context API lost fresh sampling while the test bot was online and idle.'
++            }
++        }
++        Copy-Item -LiteralPath $contextCapture -Destination (Join-Path $stage 'context-online.json')
++        Send-WorldCommand 'server playerbotdev stop'
++        Wait-For {
++            $capture = Read-ContextCapture
++            $capture -and $capture.entities[0].state -eq 'offline' -and $null -eq $capture.entities[0].player -and $null -eq $capture.entities[0].bot
++        } 30 'Context API clears logged-out state'
++        Copy-Item -LiteralPath $contextCapture -Destination (Join-Path $stage 'context-offline.json')
++        Send-WorldCommand 'server playerbotdev start'
++        Wait-For {
++            $capture = Read-ContextCapture
++            $capture -and $capture.entities[0].state -eq 'online' -and $capture.entities[0].session_generation -gt $contextGeneration
++        } 30 'Context API new login generation'
++        Copy-Item -LiteralPath $contextCapture -Destination (Join-Path $stage 'context-relogin.json')
++        Send-WorldCommand 'server shutdown 0'
++        if (-not $worldWorker.Process.WaitForExit(60 * 1000) -or $worldWorker.Process.ExitCode -ne 0) { throw 'Context API fixture shutdown failed.' }
++        $contextStopped = Read-ContextCapture
++        if (-not $contextStopped -or $contextStopped.server.status -ne 'stopped') { throw 'Context API did not publish clean stopped state.' }
++        Write-Host 'Context API native online/offline/relogin/stopped capture passed; gameplay party/client comparison remains separate.'
++        return
++    }
+     if ($CheckDuplicateStart) {
+         Send-WorldCommand 'server playerbotdev start'
+         $worldOutput = Join-Path $stage 'world.stdout.log'

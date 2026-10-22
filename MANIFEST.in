@@ -1,0 +1,9 @@
+include LICENSE NOTICE.md *.md SHARED-SOURCE.json RELEASE-PROFILE.json
+graft server-module
+graft scripts
+graft native-tests
+graft contracts
+graft examples
+graft integration
+graft tests
+global-exclude __pycache__ *.py[cod] *.log *.exe *.dll *.pdb *.whl

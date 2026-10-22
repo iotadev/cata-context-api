@@ -1,0 +1,168 @@
+diff --git a/.gitignore b/.gitignore
+index 89894d884e..2f73702f82 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -29,6 +29,7 @@ modules/**/*.conf
+ # Optional modules are maintained in separate Git checkouts.
+ /modules/mod-playerbots/
+ /modules/mod-ahbot/
++/modules/mod-context-api/
+ 
+ # Generated local test credentials must stay local even if copied outside build/.
+ test-db-credentials.json
+diff --git a/src/server/game/Scripting/ScriptMgr.cpp b/src/server/game/Scripting/ScriptMgr.cpp
+index 80af43b111..d9ede1cad6 100644
+--- a/src/server/game/Scripting/ScriptMgr.cpp
++++ b/src/server/game/Scripting/ScriptMgr.cpp
+@@ -1914,6 +1914,11 @@ void ScriptMgr::OnPlayerLogin(Player* player, bool firstLogin)
+     FOREACH_SCRIPT(PlayerScript)->OnLogin(player, firstLogin);
+ }
+ 
++void ScriptMgr::OnPlayerUpdate(Player* player, uint32 diff)
++{
++    FOREACH_SCRIPT(PlayerScript)->OnUpdate(player, diff);
++}
++
+ void ScriptMgr::OnPlayerLogout(Player* player)
+ {
+     FOREACH_SCRIPT(PlayerScript)->OnLogout(player);
+diff --git a/src/server/game/Scripting/ScriptMgr.h b/src/server/game/Scripting/ScriptMgr.h
+index bb6e9e5746..375dfb19cb 100644
+--- a/src/server/game/Scripting/ScriptMgr.h
++++ b/src/server/game/Scripting/ScriptMgr.h
+@@ -685,6 +685,9 @@ class TC_GAME_API PlayerScript : public ScriptObject
+         // Called when a player logs out.
+         virtual void OnLogout(Player* /*player*/) { }
+ 
++        // Read-only observers run in the owning map's session update context.
++        virtual void OnUpdate(Player* /*player*/, uint32 /*diff*/) { }
++
+         // Called when a player is created.
+         virtual void OnCreate(Player* /*player*/) { }
+ 
+@@ -1028,6 +1031,7 @@ class TC_GAME_API ScriptMgr
+         void OnPlayerSpellCast(Player* player, Spell* spell, bool skipCheck);
+         void OnPlayerLogin(Player* player, bool firstLogin);
+         void OnPlayerLogout(Player* player);
++        void OnPlayerUpdate(Player* player, uint32 diff);
+         void OnPlayerCreate(Player* player);
+         void OnPlayerDelete(ObjectGuid guid, uint32 accountId);
+         void OnPlayerFailedDelete(ObjectGuid guid, uint32 accountId);
+diff --git a/src/server/game/Server/PlayerbotSessionHooks.h b/src/server/game/Server/PlayerbotSessionHooks.h
+index e3c79c677e..34671250fc 100644
+--- a/src/server/game/Server/PlayerbotSessionHooks.h
++++ b/src/server/game/Server/PlayerbotSessionHooks.h
+@@ -7,6 +7,7 @@
+ 
+ #include "Define.h"
+ #include "PlayerbotStrategyBinding.h"
++#include "PlayerbotContextState.h"
+ #include <memory>
+ #include <string>
+ #include <vector>
+@@ -45,6 +46,8 @@ public:
+     virtual bool IsAttacking() const = 0;
+     virtual uint32 GetStrategyRoleMask() const = 0;
+     virtual std::shared_ptr<PlayerbotStrategySnapshot const> GetStrategySnapshot() const = 0;
++    // Optional diagnostics. Caller must own the player's map update context.
++    virtual PlayerbotContextState GetContextStateForMap() const { return {}; }
+     virtual void UpdateMap(uint32 diff) = 0;
+     virtual void UpdateWorld() = 0;
+ };
+diff --git a/src/server/game/Server/WorldSession.cpp b/src/server/game/Server/WorldSession.cpp
+index 6f39976d91..8004984864 100644
+--- a/src/server/game/Server/WorldSession.cpp
++++ b/src/server/game/Server/WorldSession.cpp
+@@ -280,6 +280,11 @@ bool WorldSession::RequestPlayerbotStrategy(uint32 requesterGuidLow, std::string
+     return IsServerOrigin() && _playerbotHooks && requesterGuidLow && command.size() <= 253 && token.size() <= 64 && target.size() <= 64 &&
+         _playerbotHooks->RequestPlayerbotStrategy(requesterGuidLow, command, token, target, batch, binding);
+ }
++PlayerbotContextState WorldSession::GetPlayerbotContextStateForMap() const
++{
++    return IsServerOrigin() && _playerbotHooks ? _playerbotHooks->GetContextStateForMap() : PlayerbotContextState{};
++}
++
+ std::shared_ptr<PlayerbotStrategySnapshot const> WorldSession::GetPlayerbotStrategySnapshot() const
+ {
+     return IsServerOrigin() && _playerbotHooks ? _playerbotHooks->GetStrategySnapshot() : nullptr;
+@@ -614,6 +619,10 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
+     {
+         if (_playerbotHooks)
+             _playerbotHooks->UpdateMap(diff);
++        // Session updates remain scheduled even when an idle player's grid
++        // does not visit Player::Update. Observers still run on the map owner.
++        if (_player && _player->IsInWorld())
++            sScriptMgr->OnPlayerUpdate(_player, diff);
+         // Send time sync packet every 5s.
+         if (_timeSyncTimer > 0)
+         {
+diff --git a/src/server/game/Server/WorldSession.h b/src/server/game/Server/WorldSession.h
+index d72b7feaf1..385a5ff619 100644
+--- a/src/server/game/Server/WorldSession.h
++++ b/src/server/game/Server/WorldSession.h
+@@ -28,6 +28,7 @@
+ #include "ServerOriginPlayerbotLifecycle.h"
+ #include "NativeCharacterCreationReceipt.h"
+ #include "PlayerbotStrategyBinding.h"
++#include "PlayerbotContextState.h"
+ #include <unordered_map>
+ 
+ #include "AsyncCallbackProcessor.h"
+@@ -528,6 +529,7 @@ class TC_GAME_API WorldSession
+             PlayerbotStrategyBinding const& binding = {});
+         std::shared_ptr<void const> GetPlayerbotRequestIdentity() const { return std::atomic_load(&_playerbotRequestIdentity); }
+         std::shared_ptr<PlayerbotStrategySnapshot const> GetPlayerbotStrategySnapshot() const;
++        PlayerbotContextState GetPlayerbotContextStateForMap() const;
+         bool RequestPlayerbotRebuff(uint32 requesterGuidLow);
+         bool RequestPlayerbotStay(uint32 requesterGuidLow);
+         uint32 GetPlayerbotStrategyRoleMask() const;
+diff --git a/src/server/game/Server/PlayerbotContextState.h b/src/server/game/Server/PlayerbotContextState.h
+new file mode 100644
+--- /dev/null
++++ b/src/server/game/Server/PlayerbotContextState.h
+@@ -0,0 +1,18 @@
++/* GPL v2 or later. See the TrinityCore AUTHORS file. */
++#ifndef TRINITY_PLAYERBOT_CONTEXT_STATE_H
++#define TRINITY_PLAYERBOT_CONTEXT_STATE_H
++#include "Define.h"
++#include "PlayerbotActionHistory.h"
++#include <string>
++#include <vector>
++
++// A copied read result. Only request this from the player's map update context.
++struct PlayerbotContextState
++{
++    bool Available = false, Staying = false;
++    std::string EngineState, LastExecutedAction;
++    uint32 QueuedCount = 0;
++    std::vector<std::string> CombatStrategies, NonCombatStrategies;
++    PlayerbotActionHistory ActionHistory;
++};
++#endif
+diff --git a/src/server/game/Server/PlayerbotActionHistory.h b/src/server/game/Server/PlayerbotActionHistory.h
+new file mode 100644
+--- /dev/null
++++ b/src/server/game/Server/PlayerbotActionHistory.h
+@@ -0,0 +1,22 @@
++/* GPL v2 or later. Copied diagnostics only; no native objects or mutation authority. */
++#ifndef TRINITY_PLAYERBOT_ACTION_HISTORY_H
++#define TRINITY_PLAYERBOT_ACTION_HISTORY_H
++#include "Define.h"
++#include <optional>
++#include <string>
++#include <vector>
++struct PlayerbotActionEvent
++{
++    uint64 Sequence = 0, FirstSequence = 0;
++    uint32 FirstAgeMs = 0, LastAgeMs = 0, Repeats = 1;
++    std::string Engine, Action, Kind, Reason;
++    bool ExecuteCalled = false;
++    std::optional<bool> ActionReturn, EngineResult;
++};
++struct PlayerbotActionHistory
++{
++    bool Available = false;
++    uint64 Epoch = 0, LastSequence = 0, Overwritten = 0, Expired = 0, Suppressed = 0;
++    std::vector<PlayerbotActionEvent> Events;
++};
++#endif
