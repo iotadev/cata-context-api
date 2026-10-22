@@ -25,6 +25,11 @@ command waits for stdio protocol messages from a local MCP client. See
 [the client example](examples/mcp-client.example.json); replace its two paths.
 No automatic client registration, public listener or remote hosting is supplied.
 
+For consumers of the earlier shared development tree, use `cata_context` instead
+of `game_context` imports and launch commands. This release does not install the
+shared `game_context` namespace. Update and pin any owning consumer (including an
+optional Chatter worker) separately; this is not an automatic deployment migration.
+
 ## Install the native module
 
 Copy `server-module/` into a **new** `modules/mod-context-api/` directory in the matching
