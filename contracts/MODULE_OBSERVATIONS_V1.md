@@ -3,7 +3,7 @@
 This additive schema-1 extension is distinct from Playerbots action history.
 `capabilities.module_observations` is absent/empty without a provider, or contains
 `skate_pilot_v1`. Only the latter adds `modules.get_observations` to query discovery.
-The shared query understands either expansion; the native provider currently
+The schema is shared, but each release accepts only its own expansion; the native provider currently
 exists only for statically linked WOTLK skate/context modules. Cata does not
 advertise unsupported native skate diagnostics.
 
@@ -64,7 +64,7 @@ subtracted from one another. Wall/elapsed anchors provide their correlation.
 Party/bot queries omit module records, so retained decisions cannot silently
 become live dialogue facts. No gameplay commands or control authority are added.
 
-CLI: `python -m game_context.cli --snapshot PATH --json modules GUID`.
+CLI: `python -m cata_context --snapshot PATH --json modules GUID`.
 Loopback GET: `/v1/modules/GUID`. Optional stdio MCP: `modules_get_observations`.
 Missing provider/capture returns `module_unavailable`; out-of-scope returns no
 data. A successful transport still requires inspection of semantic status,

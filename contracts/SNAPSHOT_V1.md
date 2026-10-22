@@ -1,6 +1,6 @@
 # Snapshot v1
 
-The handoff is one UTF-8 JSON document capped by the reader at 1 MiB. A capture contains at most eight configured entities. `source` is `server` or `fixture`; fixture records are never runtime evidence. Legacy Cata reader support remains schema 1/build 15595. The shared reader also accepts the explicit WOTLK profile; see EXPANSION_PROFILES.md.
+The handoff is one UTF-8 JSON document capped by the reader at 1 MiB. A capture contains at most eight configured entities. `source` is `server` or `fixture`; fixture records are never runtime evidence. This release accepts only build 15595. The schema is shared across expansions, but each package fixes its own profile; see [expansion differences](EXPANSION_PROFILES.md).
 
 Semantic query responses are capped at 64 KiB. Exceeding that limit returns an explicit `too_large` result with null data, not a silently truncated partial snapshot.
 
@@ -16,13 +16,13 @@ The exporter uses `steady_clock` durations, not the native wrapping 32-bit milli
 
 An entity has `guid`, `session_generation`, `state`, `sampled_ms`, `sampled_at_ms`, `player`, and `bot`. Initial state is `unobserved`, not assumed offline. Login changes to `awaiting_sample` with a new generation. Logout invalidates old data and records `offline`. Map-owned publication can report `online` or `transferring`; transfer rows contain no settled player/bot details.
 
-Unavailable entity records contain null `player` and `bot` values. A currently sampled client-origin player has null bot data. A server-origin player has a bot envelope; `available=false` means its decision engine details are unavailable, not that it is a human.
+Unavailable entity records contain null `player` and `bot` values. The following origin/engine rules are Cata-specific; WOTLK reports an AI attachment envelope as described in [expansion differences](EXPANSION_PROFILES.md). A currently sampled Cata client-origin player has null bot data. A server-origin player has a bot envelope; `available=false` means its decision engine details are unavailable, not that it is a human.
 
 The query service also removes live fields when the export is stale/stopped or an individual sample is stale. A newly written export must not make an old entity sample look current. Party responses include current sample skew and observed groups, and exclude unavailable rows from current group aggregation.
 
 ## Native ownership
 
-`PlayerScript::OnUpdate` is dispatched by the map-session update after Playerbots' native map update. It samples basic player state and invokes the copied bot getter in that same context. Using the session pump keeps idle players sampled when grid visitation does not invoke `Player::Update`. It copies the native group identity only; it does not traverse cross-map party member objects. Queries contain no authoritative group membership enumeration.
+For Cata, `PlayerScript::OnUpdate` is dispatched by the map-session update after Playerbots' native map update. It samples basic player state and invokes the copied bot getter in that same context. Using the session pump keeps idle players sampled when grid visitation does not invoke `Player::Update`. It copies the native group identity only; it does not traverse cross-map party member objects. Queries contain no authoritative group membership enumeration.
 
 Login/logout update the fixed-size cache under a mutex. A pending publication with a prior generation is rejected. The writer thread copies the cache under the mutex, then serializes and writes without holding it. It retains no native game object pointers. File failures are logged with throttling and do not stop gameplay.
 
@@ -34,11 +34,11 @@ Windows publication uses `ReplaceFileW` for an existing target and `MoveFileExW`
 - `game.get_party`: configured entities, each with lifecycle and freshness; observed group IDs; sample skew. It does not claim complete party membership.
 - `playerbots.get_bot_state`: one scoped GUID. Unknown GUID is out-of-scope; a fresh client-origin sample is not-a-bot. Offline/unobserved entities retain explicit uncertainty.
 
-Player fields include name, session origin, selected target, group identity, alive/combat flags, health/power, map/instance, and position. Bot fields include controller, follow target, attack-request intent, role mask, and optionally engine state, staying, last executed action, queue count, and combat/noncombat strategies. Role mask is the module's native copied mask, not a universal role taxonomy. No current-action or spell-outcome claim is implied.
+Player fields include name, session origin, selected target, group identity, alive/combat flags, health/power, map/instance, and position. Cata bot fields include controller, follow target, attack-request intent, role mask, and optionally engine state, staying, last executed action, queue count, and combat/noncombat strategies. Role mask is the module's native copied mask, not a universal role taxonomy. No current-action or spell-outcome claim is implied.
 
 The query adapter derives `observed_roles` from the matching Cata module's strategy flags (tank=4, damage=8, healer=16), preserving the raw mask. Other flags such as melee=64 are excluded. This describes strategy roles, not proof of actual threat/healing performance or an authoritative party assignment. An unavailable engine reports unknown roles rather than an empty known list.
 
-## Optional native phase and engagement data (adapter 0.2.0)
+## Optional Cata native phase and engagement data (adapter 0.2.0)
 
 Schema 1 gains an additive `player.diagnostics` object when `ContextAPI.DiagnosticDetails` is enabled. `capabilities.diagnostic_fields` advertises the enabled fields. Older captures remain readable and report diagnostics as unsupported; a newer exporter with the gate off reports disabled. Missing diagnostics is not evidence of no attack victim.
 
@@ -57,7 +57,7 @@ the active engine's historical last-success value, rather than an all-engine
 timeline. The legacy `attack_requested` field exposes the adapter's IsAttacking
 flag; it does not expose the pending combat-command mailbox or prove a landed
 attack. Use sampled native combat state and client evidence for those questions.
-# Optional engine action history (exporter 0.3.0)
+## Optional Cata engine action history (exporter 0.3.0)
 
 `capabilities.history` and `playerbots.get_action_history` advertise export support.
 An entity may include top-level `action_history`, independent of current player

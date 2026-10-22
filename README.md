@@ -1,76 +1,46 @@
 # Cataclysm Context API
 
-Experimental read-only realm context for **Cataclysm, build 15595, TrinityCore**.
-This is an independent expansion release with its own query/MCP entry points,
-native compatibility requirements and release cadence. It does not accept the
-other expansion's snapshots, even through its internal shared helpers.
+Read-only game and Playerbots context for **Cataclysm build 15595 / TrinityCore**.
+A small server module copies state for selected characters into a JSON snapshot.
+The Python package makes that snapshot available through a command line, a local
+browser view, queries and an optional MCP server for development tools.
 
-## Install Python interfaces
+Use it to inspect health, power, position, combat state, selected targets and
+observed group membership while investigating bot behavior.
 
-Python 3.10+ is required for the stdlib-only CLI/query layer; optional MCP needs
-Python 3.11+. From this source checkout:
+Cata bot diagnostics include controller/follow targets, strategy roles, engine
+state and queue counts. Optional capture adds phase, attack-victim/facing data
+and bounded engine action history.
 
-```sh
-python -m venv .venv
-# Use .venv/Scripts/python.exe on Windows; .venv/bin/python on Linux/macOS.
-python -m pip install .
-# Or install the optional official MCP SDK dependency in the chosen environment:
-python -m pip install ".[mcp]"
-python -m cata_context --snapshot /absolute/path/context-api/snapshot.json capabilities
-python -m cata_context.mcp_server --snapshot /absolute/path/context-api/snapshot.json
-```
+This is an experimental alpha. It observes server state; it does not log in as a
+WoW client or issue gameplay commands. Samples retain their age and availability,
+so stale or missing observations are not presented as current facts. The selected
+characters are a configured scope, not a guaranteed complete party roster.
 
-Activate the environment first or use its Python executable explicitly. The MCP
-command waits for stdio protocol messages from a local MCP client. See
-[the client example](examples/mcp-client.example.json); replace its two paths.
-No automatic client registration, public listener or remote hosting is supplied.
+## Get started
 
-For consumers of the earlier shared development tree, use `cata_context` instead
-of `game_context` imports and launch commands. This release does not install the
-shared `game_context` namespace. Update and pin any owning consumer (including an
-optional Chatter worker) separately; this is not an automatic deployment migration.
+1. Read [compatibility and validation limits](QUALIFICATION.md). The native
+   module needs a matching core and Playerbots checkout.
+2. Download the [alpha source release](https://github.com/iotadev/cata-context-api/releases/tag/v0.4.0-alpha.1)
+   or clone this repository. The source contains both the native module and Python
+   interfaces; the wheel contains only the Python interfaces.
+3. Follow [installation and usage](USAGE.md) to build the native module, select
+   characters, enable snapshots, and connect the CLI or MCP client.
 
-## Install the native module
+The native module defaults off. Python requires 3.10+ for queries and the CLI;
+optional MCP requires 3.11+. No model service is needed to collect or inspect data.
 
-Copy `server-module/` into a **new** `modules/mod-context-api/` directory in the matching
-TrinityCore source checkout. Do not overwrite an existing module. Use the core's normal
-static-module build/configuration workflow. Runtime configuration defaults off.
-Choose scoped player GUID counters and a trusted snapshot path explicitly.
-Installation starts no services and changes no account, database or game state.
-Optional engine action history requires the matching Playerbots collector and both native gates.
+## Project information
 
-See [compatibility and qualification](QUALIFICATION.md) before building. The
-wheel contains only Python interfaces and licenses; the source archive contains
-the native module, contracts and tests. No server binary, database, client/game
-data, credentials, model runtime or private captures are distributed.
+- [Usage and MCP setup](USAGE.md)
+- [Compatibility and native qualification](QUALIFICATION.md)
+- [Release validation](VALIDATION.md) and [release notes](RELEASE_NOTES.md)
+- [Snapshot contract](contracts/SNAPSHOT_V1.md) and
+  [expansion differences](contracts/EXPANSION_PROFILES.md)
+- [License and credits](NOTICE.md) â€” GPL-2.0-or-later
 
-Local release checks are recorded in [VALIDATION.md](VALIDATION.md).
-
-## Boundaries
-
-All reads preserve source, build, realm, boot, session, scope and freshness.
-Missing, stale, stopped and unavailable data are never presented as live state.
-Configured scope is not a complete roster or an atomic multi-map snapshot.
-Server state is not client-rendered/packet-observed state. Action returns do not
-prove asynchronous completion or landed spells. No gameplay controls are exposed.
-
-The public `cata_context/queries.py` and `cata_context/mcp_server.py` belong to this
-expansion and can evolve independently. `_cata_context_core/` contains common copied
-value/validation/freshness/transport helpers; [SHARED-SOURCE.json](SHARED-SOURCE.json)
-records identical input hashes for carrying common fixes between releases.
-It is bundled source, not a dependency on the other expansion or a shared server.
-
-## Validate
-
-```sh
-python -m unittest discover -s tests -v
-python -m pip install build
-python -m build
-python scripts/check-release.py --artifacts dist
-```
-
-MCP tests are skipped explicitly when its optional dependency is absent. GitHub
-CI is configured for core Python 3.10 and optional MCP on 3.11/3.14, including
-Windows. A configured workflow is not evidence that hosted jobs have run.
-
-GPL-2.0-or-later; see [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+This repository owns its native module and `cata_context` query/MCP interfaces.
+The [other expansion](https://github.com/iotadev/wotlk-context-api)
+is released separately. Common helper code is bundled under a private namespace;
+[SHARED-SOURCE.json](SHARED-SOURCE.json) records the shared input hashes. Neither
+package depends on the other, and each rejects the other expansion's snapshots.

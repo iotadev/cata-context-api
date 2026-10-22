@@ -6,4 +6,4 @@ Tag: `v0.4.0-alpha.1`; Python version: `0.4.0a1`.
 
 Optional engine action history requires the matching Playerbots collector and both native gates.
 
-See README.md and QUALIFICATION.md for installation and limits. No controls or public endpoint are included.
+See [README.md](README.md) and [QUALIFICATION.md](QUALIFICATION.md) for installation and limits. No controls or public endpoint are included.

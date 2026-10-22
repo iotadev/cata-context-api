@@ -1,23 +1,23 @@
 # Shared context, expansion-specific native adapters
 
-The canonical project remains at `CATA/cata-context-api` for now; its location and
-distribution name are retained to avoid a repository/runtime migration. The
-`game_context` package owns common parsing, queries, captures and optional MCP.
-`cata_context` remains the build-15595 compatibility interface. No new installation,
-entry-point registration, service or host configuration is applied by this change.
+Cata and WOTLK are independent releases with their own native modules and public
+query/MCP interfaces. This repository installs `cata_context` for build 15595.
+It rejects foreign-expansion snapshots, including through internal helpers.
+Identical common implementation is bundled privately and fingerprinted in
+[SHARED-SOURCE.json](../SHARED-SOURCE.json); neither release requires the other.
+The profiles below describe the shared schema, not interchangeable binaries.
 
 ## Profiles
 
 | Build | Expansion | Core | Native source |
 |---|---|---|---|
-| 15595 | cata | TrinityCore | Existing `server-module`, native bot getter in Cata Playerbots |
-| 12340 | wotlk | AzerothCore | `adapters/wotlk`, matching WOTLK Playerbots lookup |
+| 15595 | cata | TrinityCore | Cata repository: `server-module/`, copied Cata Playerbots getter |
+| 12340 | wotlk | AzerothCore | WOTLK repository: `server-module/`, matching WOTLK Playerbots lookup |
 
 Schema 1 envelopes keep the existing freshness, boot/session, scope and bounded
 query rules. Old Cata schema-1 captures lacking expansion/core labels are accepted
 only as the legacy 15595 profile. Other profiles must match all three fields.
-Existing Cata readers/commands remain pinned to 15595; the common entry points
-accept either supported profile. This does not make native binaries interchangeable.
+Cata entry points are pinned to 15595; WOTLK entry points are pinned to 12340. This does not make native binaries interchangeable.
 
 WOTLK `player.origin=unknown` deliberately makes no assertion about client/session
 origin. A nullable bot envelope is a sampled AI attachment, not Cata's server-origin
@@ -46,8 +46,8 @@ packet completeness are not reported. Position and these fields share the entity
 sampling timestamp and lifecycle identity. Transfer/offline/stale/stopped results
 withhold current player fields, including movement.
 
-`MovementCapture` and `game-context ... capture-movement GUID` preserve bounded
-historical copies for either expansion: 256 records, explicit overwritten count,
+`MovementCapture` and `cata-context ... capture-movement GUID` preserve bounded
+historical copies within the selected expansion: 256 records, explicit overwritten count,
 boot/build/profile, session generation, map/instance and sample timestamps.
 Duplicate current entity samples are skipped. Unavailable polls produce gap
 records without positions. Fixture source stays fixture; history never becomes
@@ -71,22 +71,23 @@ live inventory, client collision or gameplay outcomes.
 
 ## Consumers
 
-Bot-context consumers use `game_context.queries.Queries` with a fixed trusted
+Bot-context consumers use `cata_context.queries.Queries` with a fixed trusted
 snapshot path, then `query('game.get_party')`. Check status, source and each
 entity's availability; the selected character list is not a complete party roster.
 The library creates no model calls, goal state, actions or Chatter integration.
 
-Skate research can use `python -m game_context --snapshot PATH capture-movement
+Skate research can use `python -m cata_context --snapshot PATH capture-movement
 GUID --duration-seconds 10 --interval-ms 250`. Sampling/export interval may be
 slower than polling. The native movement capability must be qualified independently
 before using these records as runtime evidence. This command does not activate a
 skate mode or modify movement.
 
-The optional shared stdio MCP surface provides five read-only queries under
-`context_get_capabilities`, `game_get_party`, `playerbots_get_bot_state`, and
-`playerbots_get_action_history`; resources use `context://`. Existing Cata MCP
-tool/resource names stay compatible and pinned. There is no MCP movement-control
-tool, listener or host registration in this implementation.
+The stdio MCP surface registers `cata_get_capabilities`, `game_get_party`,
+`playerbots_get_bot_state`, `playerbots_get_action_history` and
+`modules_get_observations`. Resources are `cata://contract` and
+`cata://capabilities`. Tool registration does not mean every native capability
+is available: inspect capabilities and unavailable responses. Setup is in
+[USAGE.md](../USAGE.md). There are no gameplay-control tools.
 
 WOTLK master identity resolution never dereferences the native master pointer
 across maps: self identity is local, and another master is resolved by pointer
@@ -96,7 +97,7 @@ null controller GUID. That means a native master relation exists but its GUID
 was not safely captured; it is distinct from `no_master` and grants no authority.
 
 Optional retained module diagnostics use the same expansion-neutral query and
-`modules_get_observations` MCP tool. The new WOTLK native provider advertises
+`modules_get_observations` MCP tool. A compatible separately installed WOTLK provider can advertise
 `skate_pilot_v1`; Cata returns module_unavailable until it has a native provider.
 This does not change either profile's AI-history support. See
 [MODULE_OBSERVATIONS_V1.md](MODULE_OBSERVATIONS_V1.md).

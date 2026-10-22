@@ -1,3 +1,4 @@
+[worldserver]
 # Optional read-only snapshots. Does not enable any Playerbot gameplay controls.
 ContextAPI.Enabled = 0
 # Player character GUID counters, comma separated; 1-8 unique positive IDs.
